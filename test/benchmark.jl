@@ -1,47 +1,21 @@
-using Benchmark, Expokit, ExpmV
+using BenchmarkTools, Expokit, ExpmV
 
-const d = 100
-const N = 100
+BenchmarkTools.DEFAULT_PARAMETERS.seconds = 120
 
-function setup(d,p)
-  r = sprandn(d,d,p)+1im*sprandn(d,d,p);
+const p = 1e-3
 
-  rv = randn(d)+1im*randn(d); 
-  rv = rv/norm(rv,2);
+bench = Dict{String,Any}[]
+for d in 2.^(5:10)
+    println("d = $d ...")
+    b1 = @benchmarkable expm(full_r)*rv setup=((full_r,rv) = (full(randn()*sprandn($d,$d,p/2)+1im*sprandn($d,$d,p/2)), rv=normalize(randn($d)+1im*randn($d))))
+    b2 = @benchmarkable Expokit.expmv(rt,r,rv) setup=((rt,r,rv)=(rand(), sprandn($d,$d,p/2)+1im*sprandn($d,$d,p/2), normalize(randn($d)+1im*randn($d))))
+    b3 = @benchmarkable ExpmV.expmv(rt,r,rv) setup=((rt,r,rv)=(rand(), sprandn($d,$d,p/2)+1im*sprandn($d,$d,p/2), normalize(randn($d)+1im*randn($d))))
 
-  rt = randn();
+    t1 = run(b1)
+    t2 = run(b2)
+    t3 = run(b3)
 
-  full_r = full(rt*r);  
-  return rt,r,rv,full_r
+    push!(bench,Dict("d"=>d, "p"=>p,"expm"=>t1,"expokit"=>t2,"expmv"=>t3))
 end
 
-function expokitf(rt,r,rv,full_r)
-  Expokit.expmv(rt,r,rv)
-end
-
-function expmvf(rt,t,rv,full_r)
-  ExpmV.expmv(rt,r,rv)
-end
-
-function expmf(rt,t,rv,full_r)
-  expm(full_r)*rv
-end
-
-println("Setup ...")
-const rt,r,rv,full_r = setup(d,parsefloat(ARGS[1]))
-
-expmv_example() = expokitf(rt,r,rv,full_r)
-expokit_example() = expmvf(rt,r,rv,full_r)
-expm_example() = expmf(rt,r,rv,full_r)
-
-println("Warming up ...")
-expmv_example()
-expokit_example()
-expm_example()
-
-println("Benchmarking...")
-println("density of $(nnz(r)/prod(size(r))), dimension $d, $N trials")
-c=compare([expmv_example, expokit_example, expm_example],N)
-println(c)
-
-
+JLD.save("master-bench.jld","bench",bench)
